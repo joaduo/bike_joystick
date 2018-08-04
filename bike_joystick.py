@@ -4,6 +4,7 @@ from arduino_listener import yield_bike_msgs, prnt
 import argparse
 from evdev.device import AbsInfo
 
+
 class VirtualJoystick(object):
     def __init__(self, top_rpm):
         cap = {1L: set([288L,
@@ -53,16 +54,12 @@ def run_virtual_bike(args=None):
     vbike = VirtualJoystick(args.top)
     max_measure = 0
     for msg in yield_bike_msgs(arduino_dev='/dev/ttyACM0'):
-        if msg.type == 'short':
-            continue
         rpm = msg.rpm
         if not rpm:
             max_measure = 0
         max_measure = max(rpm, max_measure)
         value = int(rpm + args.top)
-        prnt('rpm=%.3f', rpm)
-        prnt('value=%s', value)
-        prnt('top=%s', max_measure)
+        prnt('value=%s, rpm=%.3f, top=%s', value, rpm, max_measure)
         vbike.signal(value)
 
 

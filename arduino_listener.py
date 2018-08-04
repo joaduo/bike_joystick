@@ -1,16 +1,11 @@
 # Copyright (C) 2018  Joaquin Duo under GPL v3
 import serial
 import threading
-from collections import namedtuple
 try:
     from queue import Queue, Empty
 except ImportError:
     from Queue import Queue, Empty
 
-def to_rpm(itime, litime):
-    # Alsways assume 1 spin in the delta time
-    # Arduino is fast enough to count 1 spin and send the message
-    return 60000 / float(itime - litime)
 
 def extract_line(line):
     try:
@@ -47,15 +42,39 @@ class ArduinoBikeListener(threading.Thread):
                     type_ = 'short'
                 else:
                     type_ = 'long'
-                msg = BikeMsg(to_rpm(itime, litime), itime, litime, type_)
+                msg = BikeMsg(itime, litime, type_)
                 self.msg_queue.put(msg)
                 prev_delta_t = delta_t
 
 
-BikeMsg = namedtuple('BikeMsg', 'rpm itime litime type')
+class BikeMsg(object):
+    def __init__(self, itime=0, litime=0, type_='stopped'):
+        self.itime = itime
+        self.litime = litime
+        self.type = type_
+
+    @property
+    def delta(self):
+        return self.itime - self.litime
+
+    @property
+    def rpm(self):
+        min = 60 * 1000.
+        # The long cycle is 6 times larger tha short cycle
+        # So total spin time is 6 + 1 = 7
+        # Proportions are:
+        # - short 1/7 of the spin
+        # - long 6/7 of the spin
+        # We use this to conver to RPM
+        if self.type == 'short':
+            return min / (self.delta * 7)
+        elif self.type == 'long':
+            return min * 6 / (self.delta * 7)
+        return 0.
+
 
 def yield_bike_msgs(timeout=1.5, arduino_dev='/dev/ttyACM0'):
-    stopped_msg = BikeMsg(0., 0, 0., 'stopped')
+    stopped_msg = BikeMsg()
     msg_queue = Queue()
     listener = ArduinoBikeListener(arduino_dev, msg_queue)
     listener.start()
