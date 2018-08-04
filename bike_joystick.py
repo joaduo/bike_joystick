@@ -52,12 +52,15 @@ def run_virtual_bike(args=None):
     args = parser.parse_args(args)
     vbike = VirtualJoystick(args.top)
     max_measure = 0
-    for rpm, ratio in yield_bike_msgs(arduino_dev='/dev/ttyACM0'):
+    for msg in yield_bike_msgs(arduino_dev='/dev/ttyACM0'):
+        if msg.type == 'short':
+            continue
+        rpm = msg.rpm
         if not rpm:
             max_measure = 0
         max_measure = max(rpm, max_measure)
         value = int(rpm + args.top)
-        prnt('rpm=%.3f ratio=%.3f', rpm, ratio)
+        prnt('rpm=%.3f', rpm)
         prnt('value=%s', value)
         prnt('top=%s', max_measure)
         vbike.signal(value)

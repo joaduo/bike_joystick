@@ -1,6 +1,7 @@
 # Copyright (C) 2018  Joaquin Duo under GPL v3
 import serial
 import threading
+from collections import namedtuple
 try:
     from queue import Queue, Empty
 except ImportError:
@@ -36,7 +37,6 @@ class ArduinoBikeListener(threading.Thread):
     def run(self):
         ser = serial.Serial(self.arduino_dev, 9600)
         prev_delta_t = 1
-        delta_ratio = 0.01
         while True:
             msg = ser.readline()
             msg = extract_line(msg)
@@ -44,17 +44,18 @@ class ArduinoBikeListener(threading.Thread):
                 itime, litime = msg
                 delta_t = itime - litime
                 if delta_t < prev_delta_t:
-                    # Its a small ON cycle
-                    delta_ratio = delta_t / float(prev_delta_t)
+                    type_ = 'short'
                 else:
-                    # Its a large OFF cycle (full spin) 
-                    rpm = to_rpm(itime, litime)
-                    self.msg_queue.put((rpm, delta_ratio))
+                    type_ = 'long'
+                msg = BikeMsg(to_rpm(itime, litime), itime, litime, type_)
+                self.msg_queue.put(msg)
                 prev_delta_t = delta_t
 
 
+BikeMsg = namedtuple('BikeMsg', 'rpm itime litime type')
+
 def yield_bike_msgs(timeout=1.5, arduino_dev='/dev/ttyACM0'):
-    stopped_msg = (0, 1.)
+    stopped_msg = BikeMsg(0., 0, 0., 'stopped')
     msg_queue = Queue()
     listener = ArduinoBikeListener(arduino_dev, msg_queue)
     listener.start()
