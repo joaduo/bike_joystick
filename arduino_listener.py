@@ -88,7 +88,7 @@ def yield_bike_msgs(timeout=1.5, arduino_dev='/dev/ttyACM0'):
         except Empty:
             if not stopped:
                 stopped = True
-                yield stopped_msg 
+                yield stopped_msg
 
 def main():
     for m in yield_bike_msgs():
