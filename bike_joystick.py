@@ -59,8 +59,8 @@ def run_virtual_bike(args=None):
             max_measure = 0
         max_measure = max(rpm, max_measure)
         value = int(rpm + args.top)
-        prnt('delta=%s', msg.delta)
-        prnt('rpm=%.2f, joystick_value=%s, top=%s', rpm, value , max_measure)
+        prnt(repr(msg))
+        #prnt('rpm=%.2f, joystick_value=%s, top=%s', rpm, value , max_measure)
         vbike.signal(value)
 
 
