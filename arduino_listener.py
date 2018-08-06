@@ -54,7 +54,7 @@ class ArduinoBikeListener(threading.Thread):
 
 
 class Msg(object):
-    def __repr__(self, *args, **kwargs):
+    def __repr__(self):
         return '%s(%s, %s, %s)' % (self.__class__.__name__, self.rpm, self.delta, self.__dict__)
 
     def to_rpm(self, delta, type_='long'):
@@ -77,11 +77,9 @@ class BikeMsg(Msg):
         self.itime = itime
         self.litime = litime
         self.type = type_
-
     @property
     def delta(self):
         return self.itime - self.litime
-
     @property
     def rpm(self):
         return self.to_rpm(self.delta, type_=self.type)
@@ -93,14 +91,23 @@ class StopMsg(BikeMsg):
 
 
 class CalcMsg(Msg):
-    def __init__(self, accel, orig_rpm, delta):
+    def __init__(self, accel=0, orig_rpm=0, attempt=1, timeout=0):
         self.accel = accel
         self.orig_rpm = orig_rpm
-        self.delta = delta
-
+        self.attempt = attempt
+        self.timeout = timeout # in milliseconds
+    @property
+    def delta(self):
+        return self.attempt * self.timeout
     @property
     def rpm(self):
-        return self.accel * self.delta + self.orig_rpm
+        if self.accel > 0:
+            # Never acccelerate too much
+            weight = 0.3
+        else:
+            # Always tend to decelerate
+            weight = 0.5 * self.attempt
+        return self.accel * weight * self.delta + self.orig_rpm
 
 
 def get_bike_calculated(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
@@ -123,7 +130,7 @@ def get_bike_calculated(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
                 prev_msgs.pop(0)
         except Empty:
             if not stopped:
-                msg = extrapolate_rpm(prev_msgs, attempt * timeout * 1000)
+                msg = extrapolate_rpm(prev_msgs, attempt, timeout * 1000)
                 if attempt <= max_guess and msg.rpm > 0:
                     if attempt == 1 or msg.accel < 0:
                         yield msg
@@ -135,15 +142,14 @@ def get_bike_calculated(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
 
 
 
-def extrapolate_rpm(prev_msgs, delta):
+def extrapolate_rpm(prev_msgs, attempt, timeout_ms):
     if len(prev_msgs) < 2:
-        return CalcMsg(-1, 0, 1)
+        return CalcMsg()
     prev, now = prev_msgs[-2:]
     prevtime = prev.litime + prev.delta / 2.
     nowtime = now.litime + now.delta / 2.
     accel = (now.rpm - prev.rpm) / float(nowtime - prevtime)
-    weight = 0.4 # Weight down a bit our guessing
-    return CalcMsg(accel * weight , now.rpm, delta)
+    return CalcMsg(accel, now.rpm, attempt, timeout_ms)
 
 
 def main():
