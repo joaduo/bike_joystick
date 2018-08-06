@@ -1,6 +1,6 @@
 # Copyright (C) 2018  Joaquin Duo under GPL v3
 import serial
-import threading
+from bike_gamepad.common import prnt, Msg, ThreadedGenerator
 try:
     from queue import Queue, Empty
 except ImportError:
@@ -15,11 +15,6 @@ def extract_line(line):
     except ValueError:
         prnt('Wrong message %r', line)
         return None
-
-def prnt(msg, *args):
-    if args:
-        msg = msg % args
-    print(msg)
 
 
 def get_bike_raw(arduino_dev):
@@ -39,11 +34,19 @@ def get_bike_raw(arduino_dev):
             yield msg
             prev_delta_t = delta_t
 
-
-class Msg(object):
+class BikeMsg(Msg):
+    def __init__(self, itime, litime, type_):
+        self.itime = itime
+        self.litime = litime
+        self.type = type_
+    @property
+    def delta(self):
+        return self.itime - self.litime
+    @property
+    def rpm(self):
+        return self.to_rpm(self.delta, type_=self.type)
     def __repr__(self):
         return '%s(%s, %s, %s)' % (self.__class__.__name__, self.rpm, self.delta, self.__dict__)
-
     def to_rpm(self, delta, type_='long'):
         min = 60 * 1000.
         # The long cycle is 6 times larger tha short cycle
@@ -57,20 +60,6 @@ class Msg(object):
         elif type_ == 'long':
             return min * 6 / (delta * 7)
         return 0.
-
-
-class BikeMsg(Msg):
-    def __init__(self, itime, litime, type_):
-        self.itime = itime
-        self.litime = litime
-        self.type = type_
-    @property
-    def delta(self):
-        return self.itime - self.litime
-    @property
-    def rpm(self):
-        return self.to_rpm(self.delta, type_=self.type)
-
 
 class StopMsg(BikeMsg):
     def __init__(self, ):
@@ -138,22 +127,9 @@ def extrapolate_rpm(prev_msgs, attempt, timeout_ms):
     return CalcMsg(accel, now.rpm, attempt, timeout_ms)
 
 
-class ThreadedGenerator(threading.Thread):
-    def __init__(self, out_queue, generator, group=None, name=None, verbose=None):
-        threading.Thread.__init__(self, group=group, name=name, verbose=verbose)
-        self._out_queue = out_queue
-        self._generator = generator
-
-    def run(self):
-        for msg in self._generator:
-            self._out_queue.put(msg)
-
-
 def main():
     for m in get_bike_calculated():
-        #prnt(m)
-        rpm, ratio = m
-        prnt('%.2f%% %.2f %s.2f', rpm * 100 /300., rpm, ratio)
+        prnt(m)
 
 
 if __name__ == '__main__':

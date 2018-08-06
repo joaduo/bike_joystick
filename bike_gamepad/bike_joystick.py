@@ -1,12 +1,18 @@
 # Copyright (C) 2018  Joaquin Duo under GPL v3
 from evdev import UInput, ecodes
-from arduino_listener import get_bike_calculated, prnt
+from bike_gamepad.rpm_listener import get_bike_calculated, prnt
 import argparse
 from evdev.device import AbsInfo
+from bike_gamepad.common import ThreadedGenerator
+from bike_gamepad.wheel_listener import get_wheel
+try:
+    from queue import Queue, Empty
+except ImportError:
+    from Queue import Queue, Empty
 
 
 class VirtualJoystick(object):
-    def __init__(self, top_rpm):
+    def __init__(self, top_rpm, top_wheel):
         #cap = {('EV_ABS', 3L): [(('ABS_X', 0),
         #                   AbsInfo(value=128, min=0, max=255, fuzz=0, flat=15, resolution=0)),
         #                  (('ABS_Y', 1L),
@@ -101,6 +107,19 @@ def run_virtual_bike(args=None):
         #prnt('rpm=%.2f, joystick_value=%s, top=%s', rpm, value , max_measure)
         vbike.signal(value)
 
+def run_virtual_gamepad():
+    msgs = Queue()
+    bike = ThreadedGenerator(msgs, get_bike_calculated())
+    bike.start()
+    wheel = ThreadedGenerator(msgs, get_wheel())
+    wheel.start()
+    while True:
+        try:
+            msg = msgs.get(timeout=0.5)
+            print(msg)
+        except Empty:
+            pass
+
 
 if __name__ == '__main__':
-    run_virtual_bike()
+    run_virtual_gamepad()
