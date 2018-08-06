@@ -1,6 +1,6 @@
 # Copyright (C) 2018  Joaquin Duo under GPL v3
 from evdev import UInput, ecodes
-from arduino_listener import yield_bike_msgs, prnt
+from arduino_listener import get_bike_calculated, prnt
 import argparse
 from evdev.device import AbsInfo
 
@@ -91,7 +91,7 @@ def run_virtual_bike(args=None):
     args = parser.parse_args(args)
     vbike = VirtualJoystick(args.top)
     max_measure = 0
-    for msg in yield_bike_msgs(arduino_dev='/dev/ttyACM0'):
+    for msg in get_bike_calculated(arduino_dev='/dev/ttyACM0'):
         rpm = msg.rpm
         if not rpm:
             max_measure = 0

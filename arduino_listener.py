@@ -21,30 +21,36 @@ def prnt(msg, *args):
         msg = msg % args
     print(msg)
 
+
+def get_bike_raw(arduino_dev):
+    ser = serial.Serial(arduino_dev, 9600)
+    prev_delta_t = 1
+    while True:
+        msg = ser.readline()
+        msg = extract_line(msg)
+        if msg:
+            itime, litime = msg
+            delta_t = itime - litime
+            if delta_t < prev_delta_t:
+                type_ = 'short'
+            else:
+                type_ = 'long'
+            msg = BikeMsg(itime, litime, type_)
+            yield msg
+            prev_delta_t = delta_t
+
+
 class ArduinoBikeListener(threading.Thread):
-    def __init__(self, arduino_dev, msg_queue, group=None, target=None, name=None, 
+    def __init__(self, arduino_dev, out_queue, group=None, target=None, name=None, 
         args=(), kwargs=None, verbose=None):
         threading.Thread.__init__(self, group=group, target=target, name=name,
                                   args=args, kwargs=kwargs, verbose=verbose)
-        self.msg_queue = msg_queue
+        self.out_queue = out_queue
         self.arduino_dev = arduino_dev
 
     def run(self):
-        ser = serial.Serial(self.arduino_dev, 9600)
-        prev_delta_t = 1
-        while True:
-            msg = ser.readline()
-            msg = extract_line(msg)
-            if msg:
-                itime, litime = msg
-                delta_t = itime - litime
-                if delta_t < prev_delta_t:
-                    type_ = 'short'
-                else:
-                    type_ = 'long'
-                msg = BikeMsg(itime, litime, type_)
-                self.msg_queue.put(msg)
-                prev_delta_t = delta_t
+        for msg in get_bike_raw(self.arduino_dev):
+            self.out_queue.put(msg)
 
 
 class Msg(object):
@@ -80,9 +86,11 @@ class BikeMsg(Msg):
     def rpm(self):
         return self.to_rpm(self.delta, type_=self.type)
 
+
 class StopMsg(BikeMsg):
     def __init__(self, ):
         BikeMsg.__init__(self, itime=0, litime=0, type_='stopped')
+
 
 class CalcMsg(Msg):
     def __init__(self, accel, orig_rpm, delta):
@@ -95,10 +103,10 @@ class CalcMsg(Msg):
         return self.accel * self.delta + self.orig_rpm
 
 
-def yield_bike_msgs(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
+def get_bike_calculated(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
     stop_msg = StopMsg()
-    msg_queue = Queue()
-    listener = ArduinoBikeListener(arduino_dev, msg_queue)
+    in_queue = Queue()
+    listener = ArduinoBikeListener(arduino_dev, in_queue)
     listener.start()
     stopped = True
     yield stop_msg
@@ -106,7 +114,7 @@ def yield_bike_msgs(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
     attempt = 1
     while True:
         try:
-            msg = msg_queue.get(timeout=timeout)
+            msg = in_queue.get(timeout=timeout)
             stopped = False
             attempt = 1
             yield msg
@@ -126,6 +134,7 @@ def yield_bike_msgs(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
                     yield stop_msg
 
 
+
 def extrapolate_rpm(prev_msgs, delta):
     if len(prev_msgs) < 2:
         return CalcMsg(-1, 0, 1)
@@ -138,7 +147,7 @@ def extrapolate_rpm(prev_msgs, delta):
 
 
 def main():
-    for m in yield_bike_msgs():
+    for m in get_bike_calculated():
         #prnt(m)
         rpm, ratio = m
         prnt('%.2f%% %.2f %s.2f', rpm * 100 /300., rpm, ratio)
