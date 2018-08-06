@@ -40,19 +40,6 @@ def get_bike_raw(arduino_dev):
             prev_delta_t = delta_t
 
 
-class ArduinoBikeListener(threading.Thread):
-    def __init__(self, arduino_dev, out_queue, group=None, target=None, name=None, 
-        args=(), kwargs=None, verbose=None):
-        threading.Thread.__init__(self, group=group, target=target, name=name,
-                                  args=args, kwargs=kwargs, verbose=verbose)
-        self.out_queue = out_queue
-        self.arduino_dev = arduino_dev
-
-    def run(self):
-        for msg in get_bike_raw(self.arduino_dev):
-            self.out_queue.put(msg)
-
-
 class Msg(object):
     def __repr__(self):
         return '%s(%s, %s, %s)' % (self.__class__.__name__, self.rpm, self.delta, self.__dict__)
@@ -113,8 +100,8 @@ class CalcMsg(Msg):
 def get_bike_calculated(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
     stop_msg = StopMsg()
     in_queue = Queue()
-    listener = ArduinoBikeListener(arduino_dev, in_queue)
-    listener.start()
+    producer = ThreadedGenerator(in_queue, get_bike_raw(arduino_dev)) 
+    producer.start()
     stopped = True
     yield stop_msg
     prev_msgs = []
@@ -141,7 +128,6 @@ def get_bike_calculated(timeout=0.5, max_guess=3, arduino_dev='/dev/ttyACM0'):
                     yield stop_msg
 
 
-
 def extrapolate_rpm(prev_msgs, attempt, timeout_ms):
     if len(prev_msgs) < 2:
         return CalcMsg()
@@ -150,6 +136,17 @@ def extrapolate_rpm(prev_msgs, attempt, timeout_ms):
     nowtime = now.litime + now.delta / 2.
     accel = (now.rpm - prev.rpm) / float(nowtime - prevtime)
     return CalcMsg(accel, now.rpm, attempt, timeout_ms)
+
+
+class ThreadedGenerator(threading.Thread):
+    def __init__(self, out_queue, generator, group=None, name=None, verbose=None):
+        threading.Thread.__init__(self, group=group, name=name, verbose=verbose)
+        self._out_queue = out_queue
+        self._generator = generator
+
+    def run(self):
+        for msg in self._generator:
+            self._out_queue.put(msg)
 
 
 def main():
