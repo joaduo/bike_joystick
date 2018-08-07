@@ -5,11 +5,14 @@ import argparse
 from evdev.device import AbsInfo
 from bike_gamepad.common import ThreadedGenerator
 from bike_gamepad.wheel_listener import get_wheel, WhelMsg
+import logging
 try:
     from queue import Queue, Empty
 except ImportError:
     from Queue import Queue, Empty
 
+
+logger = logging.getLogger(__name__)
 
 class VirtualJoystick(object):
     def __init__(self, top_rpm, top_wheel):
@@ -56,13 +59,24 @@ def run_virtual_bike(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--rpm-mult', type=float, default=1.,
                         help='rpm multiplier')
+    parser.add_argument('--rpm-top', type=float, default=660,
+                        help='Top rpm user can do')
+    parser.add_argument('--rpm-button', type=float, default=None,
+                        help='Threhold to activate button')
     parser.add_argument('-w', '--wheel-mult', type=float, default=1.,
                         help='wheel degree multiplier')
+    parser.add_argument('--wheel-top', type=float, default=256,
+                        help='Top number at 90 degrees')
+    parser.add_argument('--wheel-button', type=float, default=None,
+                        help='Threhold to activate button')
     parser.add_argument('-D', '--debug', action='store_true',
                         help='show debug msgs')
     args = parser.parse_args(args)
-    top_degrees = 256 #arbitrary number (to give enough gradient)
-    top_rpm = 660 #my physical limit
+    logging.basicConfig()
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+    top_degrees = args.wheel_top #arbitrary number (to give enough gradient)
+    top_rpm = args.rpm_top #my physical limit
     vbike = VirtualJoystick(top_rpm, top_degrees)
     msgs = Queue()
     bike = ThreadedGenerator(msgs, get_bike_calculated())
@@ -75,8 +89,7 @@ def run_virtual_bike(args=None):
             vbike.set_rpm(int(msg.rpm * args.rpm_mult) + top_rpm)
         elif isinstance(msg, WhelMsg):
             vbike.set_wheel(int(msg.degrees * args.wheel_mult) + top_degrees)
-        if args.debug:
-            prnt(msg)
+        logger.debug(msg)
 
 
 if __name__ == '__main__':
