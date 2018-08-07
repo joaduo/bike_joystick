@@ -66,7 +66,7 @@ class StopMsg(BikeMsg):
         BikeMsg.__init__(self, itime=0, litime=0, type_='stopped')
 
 
-class CalcMsg(Msg):
+class CalcMsg(BikeMsg):
     def __init__(self, accel=0, orig_rpm=0, attempt=1, timeout=0):
         self.accel = accel
         self.orig_rpm = orig_rpm

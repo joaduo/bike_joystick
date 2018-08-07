@@ -1,14 +1,16 @@
 import socket, traceback
-from bike_gamepad.common import Msg
+from bike_gamepad.common import Msg, prnt
+
 
 class WhelMsg(Msg):
     def __init__(self, phone_value, max_value):
         self.phone_value = phone_value
         self.max_value = max_value
-
     @property
-    def wheel_degrees(self):
-        return self.phone_value * self.max_value / 9.81 
+    def degrees(self):
+        return self.phone_value * self.max_value / 9.81
+    def __repr__(self):
+        return '%s(%s, %s)' % (self.__class__.__name__, self.degrees, self.__dict__)
 
 
 def get_wheel(max_value=255):
@@ -35,7 +37,7 @@ def parse_msg(msg):
 
 def main():
     for m in get_wheel():
-        print(m)
+        prnt(m)
 
 if __name__ == '__main__':
     main()
