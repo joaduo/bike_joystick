@@ -85,7 +85,7 @@ def run_virtual_bike(args=None):
     parser.add_argument('--rpm-threshold', type=float, default=200,
                         help='Rpm that makes full axis')
     parser.add_argument('--rpm-top', type=float, default=660,
-                        help='RPM axis top (default=660)')
+                        help='RPM axis top (generally equals user top RPM) (default=660)')
     parser.add_argument('--rpm-button', type=float, default=None,
                         help='Threhold to activate button')
     parser.add_argument('--wheel-threshold', type=float, default=60,
@@ -104,12 +104,12 @@ def run_virtual_bike(args=None):
     rpm_top = args.rpm_top #my physical limit
     vbike = VirtualJoystick(rpm_top, wheel_top)
     msgs = Queue()
-    bike = ThreadedGenerator(msgs, get_bike_calculated())
-    bike.start()
+    rpm = ThreadedGenerator(msgs, get_bike_calculated())
+    rpm.start()
     wheel = ThreadedGenerator(msgs, get_wheel(wheel_top))
     wheel.start()
-    wheelkey = ThresholdKey(args.wheel_button, ecodes.BTN_THUMB, vbike)
-    rpmkey = ThresholdKey(args.rpm_button * wheel_top/90., ecodes.BTN_THUMB2, vbike)
+    rpmkey = ThresholdKey(args.rpm_button, ecodes.BTN_THUMB2, vbike)
+    wheelkey = ThresholdKey(args.wheel_button * wheel_top/90., ecodes.BTN_THUMB, vbike)
     while True:
         msg = msgs.get()
         if isinstance(msg, BikeMsg):
