@@ -54,41 +54,71 @@ class VirtualJoystick(object):
         self.joystick.write(ecodes.EV_ABS, axis, value)
         self.joystick.syn()
 
+    def write(self, etype, code, value):
+        self.joystick.write(etype, code, value)
+
+
+class ThresholdKey(object):
+    def __init__(self, threshold, key_code, uinput):
+        self.threshold = threshold
+        self.key_code = key_code
+        self.uinput = uinput
+        self._pressed = 0
+
+    def set_key(self, value):
+        if value != self._pressed:
+            logger.debug('%s: Setting %s to %s', self.__class__.__name__, self.key_code, value)
+            self._pressed = value
+            self.uinput.write(ecodes.EV_KEY, self.key_code, self._pressed)
+
+    def process(self, value):
+        if not self.threshold:
+            return
+        if self.threshold < abs(value):
+            self.set_key(1)
+        else:
+            self.set_key(0)
+
 
 def run_virtual_bike(args=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('-r', '--rpm-mult', type=float, default=1.,
-                        help='rpm multiplier')
+    parser.add_argument('--rpm-threshold', type=float, default=200,
+                        help='Rpm that makes full axis')
     parser.add_argument('--rpm-top', type=float, default=660,
-                        help='Top rpm user can do')
+                        help='RPM axis top (default=660)')
     parser.add_argument('--rpm-button', type=float, default=None,
                         help='Threhold to activate button')
-    parser.add_argument('-w', '--wheel-mult', type=float, default=1.,
-                        help='wheel degree multiplier')
+    parser.add_argument('--wheel-threshold', type=float, default=60,
+                        help='Degree that makes full axis (default=60)')
     parser.add_argument('--wheel-top', type=float, default=256,
-                        help='Top number at 90 degrees')
+                        help='Wheel axis top (default=256)')
     parser.add_argument('--wheel-button', type=float, default=None,
-                        help='Threhold to activate button')
+                        help='Degree threshold to activate button')
     parser.add_argument('-D', '--debug', action='store_true',
                         help='show debug msgs')
     args = parser.parse_args(args)
     logging.basicConfig()
     if args.debug:
         logger.setLevel(logging.DEBUG)
-    top_degrees = args.wheel_top #arbitrary number (to give enough gradient)
-    top_rpm = args.rpm_top #my physical limit
-    vbike = VirtualJoystick(top_rpm, top_degrees)
+    wheel_top = args.wheel_top #arbitrary number (to give enough gradient)
+    rpm_top = args.rpm_top #my physical limit
+    vbike = VirtualJoystick(rpm_top, wheel_top)
     msgs = Queue()
     bike = ThreadedGenerator(msgs, get_bike_calculated())
     bike.start()
-    wheel = ThreadedGenerator(msgs, get_wheel(top_degrees))
+    wheel = ThreadedGenerator(msgs, get_wheel(wheel_top))
     wheel.start()
+    wheelkey = ThresholdKey(args.wheel_button, ecodes.BTN_THUMB, vbike)
+    rpmkey = ThresholdKey(args.rpm_button * wheel_top/90., ecodes.BTN_THUMB2, vbike)
     while True:
         msg = msgs.get()
         if isinstance(msg, BikeMsg):
-            vbike.set_rpm(int(msg.rpm * args.rpm_mult) + top_rpm)
+            vbike.set_rpm(int(msg.rpm * float(rpm_top)/args.rpm_threshold) + rpm_top)
+            rpmkey.process(msg.rpm)
         elif isinstance(msg, WhelMsg):
-            vbike.set_wheel(int(msg.degrees * args.wheel_mult) + top_degrees)
+            # wheel threshols is in degrees, max is 90 degrees
+            vbike.set_wheel(int(msg.degrees * 90./args.wheel_threshold) + wheel_top)
+            wheelkey.process(msg.degrees)
         logger.debug(msg)
 
 
