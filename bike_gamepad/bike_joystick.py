@@ -109,7 +109,8 @@ def run_virtual_bike(args=None):
     wheel = ThreadedGenerator(msgs, get_wheel(wheel_top))
     wheel.start()
     rpmkey = ThresholdKey(args.rpm_button, ecodes.BTN_THUMB2, vbike)
-    wheelkey = ThresholdKey(args.wheel_button * wheel_top/90., ecodes.BTN_THUMB, vbike)
+    wheelkey = ThresholdKey(args.wheel_button and args.wheel_button * wheel_top/90.,
+                            ecodes.BTN_THUMB, vbike)
     while True:
         msg = msgs.get()
         if isinstance(msg, BikeMsg):
